@@ -1,148 +1,157 @@
-# Structured Intent Extractor & Automated Tool Router Agent
+# Structured Intent Extractor and Tool Router
 
-An enterprise-grade intent classification and tool-routing system built using **LangChain Expression Language (LCEL)**, **Pydantic v2 runtime validation**, and **NVIDIA NIM microservices** (`nvidia/nemotron-3-super-120b-a12b`).
+A Python prototype that converts unstructured support messages into typed ticket data and routes the validated result to a mock backend handler.
 
-This system addresses a core production AI engineering challenge: converting unstructured, unpredictable human messages into **guaranteed JSON payloads** and deterministically routing parameters to backend Python tools without executing unvalidated model actions directly.
+The project uses LangChain Expression Language (LCEL), Pydantic v2, Python enums, and a hosted NVIDIA NIM model. The LLM classifies and extracts information; Python rules decide which handler to execute. This is a bounded routing workflow rather than an autonomous planning agent.
 
-## Key Features
+## Features
 
-- **LangChain Expression Language (LCEL) Architecture:** Built on modern LCEL pipelines (`prompt | structured_llm`) for declarative chain composition.
-- **Guaranteed Pydantic Schemas:** Utilizes `.with_structured_output()` to force LLM responses into strict Python Pydantic models (`ProcessedTicket`), complete with string `Enum` boundaries (`ActionCategory`, `PriorityLevel`).
-- **Deterministic Decision Layer:** Decouples LLM intelligence from backend code execution—the model extracts and classifies parameters while deterministic Python code safely executes backend tools.
-- **LangChain Tool Integration:** Uses the `@tool` decorator framework to register typed, docstring-documented backend functions for JIRA ticket creation, automated refund processing, and human support escalation.
-- **Package & Environment Management:** Managed with `uv` for reproducible virtual environments and dependency locking.
+- **Intent classification:** Categorizes messages as bug reports, feature requests, billing issues, or general inquiries.
+- **Structured extraction:** Requests ticket fields through `.with_structured_output()` and a `ProcessedTicket` Pydantic model.
+- **Constrained categories:** Uses enums for supported action categories and priority levels.
+- **Rule-based dispatch:** Separates model-generated ticket data from backend handler selection.
+- **Human escalation:** Demonstrates routing a critical issue to a human-support handler.
+- **Mock tools:** Includes simulated ticket creation, refund processing, and human escalation through LangChain `@tool` functions.
+- **Dependency management:** Uses `uv`, `pyproject.toml`, and `uv.lock`.
 
-## System Architecture
+## Architecture
 
 ```mermaid
 flowchart TD
-    A["Incoming Unstructured Text"] --> B["1. LCEL Prompt and Chat Model"]
-    B --> C["2. Structured Output Parser"]
-    C --> D["3. Deterministic Router and Tool Dispatcher"]
-    D --> E["JIRA Ticket Tool"]
-    D --> F["Refund Engine"]
-    D --> G["Human Escalation Queue Tool"]
+    A["Support message"] --> B["LCEL prompt and hosted chat model"]
+    B --> C["Structured extraction and Pydantic validation"]
+    C --> D["Python dispatch rules"]
+    D --> E["Mock JIRA ticket handler"]
+    D --> F["Mock refund handler"]
+    D --> G["Mock human escalation handler"]
 ```
 
-| Stage | Details |
-| --- | --- |
-| **1. LCEL Prompt & Chat Model (`router_engine.py`)** | LangChain `ChatOpenAI` pointing to the NVIDIA NIM API. Uses `nvidia/nemotron-3-super-120b-a12b` with `temperature=0.0` for deterministic classification. |
-| **2. Structured Output Parser (`.with_structured_output()`)** | Enforces the `ProcessedTicket` Pydantic schema and validates category and priority level enums. |
-| **3. Deterministic Router & Tool Dispatcher** | Evaluates ticket priority and human escalation, then matches `ActionCategory` to registered tools. |
-| **Backend Tools (`tools.py`)** | JIRA ticket creation, refund processing, and human escalation queue handlers. |
+The Python dispatch rules are deterministic for a given validated ticket. The model's classification and extracted values can vary or be incorrect, so the end-to-end workflow is not guaranteed to produce identical or correct decisions on every run.
 
-## Tech Stack
+## Tech stack
 
-| Component | Technology | Role |
+| Component | Technology | Purpose |
 | --- | --- | --- |
-| Orchestration Framework | LangChain (`langchain-core`, `langchain-openai`) | Chain construction via LCEL and structured model bindings. |
-| LLM Provider | NVIDIA NIM API | Hosted `nvidia/nemotron-3-super-120b-a12b` model. |
-| Data Validation | Pydantic v2 & Python Enums | Schema enforcement, parameter extraction, and type safety. |
-| Environment Management | `uv` | Dependency resolution and virtual environment isolation. |
+| Language | Python 3.11+ | Schemas and routing logic |
+| Orchestration | `langchain-core`, `langchain-openai` | Prompt composition and chat model integration |
+| Validation | Pydantic v2 and Python enums | Typed ticket fields and allowed values |
+| Inference provider | NVIDIA NIM | Hosted model access |
+| Model | `nvidia/nemotron-3-super-120b-a12b` | Classification and information extraction |
+| Environment | `uv` | Dependency synchronization and execution |
 
-## Repository Structure
+## Repository structure
 
 ```text
 Intent_Router_Agent/
-├── .env                 # API keys (NVIDIA_NIM_API_KEY)
-├── pyproject.toml       # Package dependencies & uv configuration
-├── uv.lock              # Locked dependency tree
-├── schemas.py           # Pydantic models & Enum classifications
-├── tools.py             # LangChain @tool decorated execution functions
-├── router_engine.py     # LCEL pipeline & dispatch router controller
-└── README.md            # Technical showcase documentation
+├── pyproject.toml       # Project dependencies and configuration
+├── uv.lock              # Dependency lockfile
+├── schemas.py           # Ticket model and enums
+├── tools.py             # Mock backend handlers using @tool
+├── router_engine.py     # LCEL pipeline and Python dispatch
+└── README.md
 ```
 
-## Installation & Setup
+Create a local `.env` file for credentials and exclude it from version control.
 
-### 1. Prerequisites
+## Setup
 
-- Python 3.11+
-- `uv` package manager
-- NVIDIA NIM API key
-
-### 2. Project Initialization
-
-Clone the repository and sync dependencies using `uv`:
+Install `uv` and ensure Python 3.11 or later is available. From the project directory, synchronize the environment:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/Intent_Router_Agent.git
-cd Intent_Router_Agent
 uv sync
 ```
 
-### 3. Environment Configuration
-
-Create a `.env` file in the root directory:
+Create a local `.env` file:
 
 ```dotenv
-NVIDIA_NIM_API_KEY="nvapi-your-actual-api-key-here"
+NVIDIA_NIM_API_KEY=your-api-key
 ```
 
-## Module Breakdown
+The configured NVIDIA NIM endpoint must support the selected model and the structured-output method used by the implementation. An OpenAI-compatible endpoint does not necessarily support every OpenAI feature. API access, model availability, and charges depend on the provider and account.
 
-### 1. `schemas.py` — Data Models & Enums
-
-Defines strict classification choices and output models using Pydantic:
-
-- **`PriorityLevel` Enum:** Restricts urgency choices to `LOW`, `MEDIUM`, `HIGH`, or `CRITICAL`.
-- **`ActionCategory` Enum:** Categorizes intents into `BUG_REPORT`, `FEATURE_REQUEST`, `BILLING_ISSUE`, or `GENERAL_INQUIRY`.
-- **`ProcessedTicket` Model:** The unified schema returned by the LLM containing extracted entities, including `customer_id`, `summary`, and `requires_human_escalation`.
-
-### 2. `tools.py` — Backend Execution Functions
-
-Implements executable tool handlers wrapped with LangChain's `@tool` decorator:
-
-- **`create_jira_ticket`:** Generates bug tickets with assigned priorities.
-- **`process_customer_refund`:** Initiates refund workflows given a validated `customer_id`.
-- **`escalate_to_human_agent`:** Bypasses automation to route critical emergencies to human support queues.
-
-### 3. `router_engine.py` — LCEL Pipeline & Dispatcher
-
-- Instantiates `ChatOpenAI` bound to the NVIDIA NIM endpoint.
-- Constructs the LCEL chain (`prompt | structured_llm`) with system rules prohibiting ungrounded speculation.
-- Parses incoming user messages, prints the structured Pydantic payload, and invokes backend tools.
-
-## Usage & Execution
-
-Run the router engine using `uv`:
+Run the demonstration:
 
 ```bash
 uv run python router_engine.py
 ```
 
-## Example Execution Logs
+## Module details
 
-### Scenario 1: Bug Report
+### `schemas.py`
+
+Defines the ticket schema and allowed classification values:
+
+| Definition | Values or fields described by the project |
+| --- | --- |
+| `PriorityLevel` | `LOW`, `MEDIUM`, `HIGH`, `CRITICAL` |
+| `ActionCategory` | `BUG_REPORT`, `FEATURE_REQUEST`, `BILLING_ISSUE`, `GENERAL_INQUIRY` |
+| `ProcessedTicket` | Category, priority, summary, customer ID, and human escalation requirement |
+
+The documented example represents a missing customer ID as `None`. A model should not invent an identifier to fill a missing field.
+
+Pydantic validates data against the declared schema. This does not verify a customer's identity, prove a complaint is accurate, or authorize an action. Type coercion and strictness depend on the model configuration; using Pydantic alone does not imply strict-mode validation.
+
+### `tools.py`
+
+Defines typed functions with docstrings and LangChain's `@tool` decorator:
+
+| Handler | Demonstrated behavior |
+| --- | --- |
+| `create_jira_ticket` | Simulates ticket creation using a summary and priority |
+| `process_customer_refund` | Simulates a refund workflow using a customer ID |
+| `escalate_to_human_agent` | Simulates sending an issue to a human-support queue |
+
+These handlers are mocks. Their output does not establish a connection to JIRA, a payment provider, or a live support queue. The `@tool` decorator exposes a callable tool interface; it does not provide authorization or transaction safeguards.
+
+### `router_engine.py`
+
+1. Configures `ChatOpenAI` for the NVIDIA NIM endpoint.
+2. Composes the extraction chain with `prompt | structured_llm`.
+3. Requests and parses ticket data using the declared Pydantic schema.
+4. Applies escalation and category rules to the resulting ticket.
+5. Invokes the selected mock handler and prints its result.
+
+The configured `temperature=0.0` reduces sampling randomness rather than guaranteeing repeatable classification. Schema or parsing failures must be handled before dispatch; successful validation does not establish semantic correctness.
+
+## Illustrative scenarios
+
+### Low-priority bug report
 
 ```text
---- Processing Incoming Message ---
-"The dark mode toggle button on the settings page has a small alignment typo. User ID: CUST_404."
+Message: The dark mode toggle on the settings page is misaligned. User ID: CUST_404.
 
---- Extracted Pydantic Form Output ---
-Category           : BUG_REPORT
-Priority           : LOW
-Summary            : The dark mode toggle button on the settings page has an alignment typo.
-Customer ID        : CUST_404
-Human Escalation   : False
+Example extracted fields:
+Category: BUG_REPORT
+Priority: LOW
+Customer ID: CUST_404
+Human escalation: False
 
---- Backend Tool Result ---
-[MOCK JIRA API] Created Issue Ticket successfully -> Summary: 'The dark mode toggle button on the settings page has an alignment typo.' | Priority: LOW
+Example action: Invoke the mock JIRA ticket handler.
 ```
 
-### Scenario 2: Critical Financial Refund & Human Escalation
+### Critical billing complaint with no customer ID
 
 ```text
---- Processing Incoming Message ---
-"CRITICAL: I was charged $500 twice on my account today! Need a refund right now!"
+Message: CRITICAL: I was charged $500 twice today! I need help immediately.
 
---- Extracted Pydantic Form Output ---
-Category           : BILLING_ISSUE
-Priority           : CRITICAL
-Summary            : Customer reports being charged $500 twice today and requests an immediate refund.
-Customer ID        : None
-Human Escalation   : True
+Example extracted fields:
+Category: BILLING_ISSUE
+Priority: CRITICAL
+Customer ID: None
+Human escalation: True
 
---- Backend Tool Result ---
-[MOCK SUPPORT QUEUE] Escalated to senior support agent -> User: UNKNOWN_USER | Issue: 'Customer reports being charged $500 twice today and requests an immediate refund.'
+Example action: Invoke the mock human escalation handler.
 ```
+
+These illustrate the documented workflow, not guaranteed outputs for every model invocation. The second example demonstrates escalation rather than completion of a refund.
+
+## Limitations and evaluation
+
+- **Structured output can fail.** Provider support, parsing, schema validation, and API requests can produce errors. This documentation does not establish retry or recovery behavior.
+- **Valid fields can still be wrong.** A ticket can satisfy the schema while containing an incorrect category, priority, or extracted identifier.
+- **Routing rules need complete coverage.** Four categories are defined, but the examples do not establish the behavior of every category, missing-field case, or unsupported input.
+- **Escalation depends on extraction.** A model can miss urgency or accept misleading instructions. Prompt instructions alone do not establish robust resistance to prompt injection.
+- **The tools are simulated.** Real actions would require authentication, authorization, business-rule checks, audit records, and duplicate-action protection. A customer ID alone is insufficient authorization for a refund.
+- **No measured accuracy is reported.** The demonstration examples are not a classification benchmark or evidence of production readiness.
+
+Useful next steps include labeled classification tests, missing-field and invalid-output tests, explicit fallback routes, API error handling, and tests that verify critical issues reach human review. These are proposed improvements, not claimed implemented features.
