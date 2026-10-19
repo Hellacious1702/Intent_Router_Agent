@@ -23,7 +23,15 @@ prompt = ChatPromptTemplate.from_messages([
         "You are an automated Customer Support Intake Router.\n"
         "Analyze incoming raw customer messages and extract structured ticket attributes.\n"
         "Carefully identify category, priority level, customer IDs, and concise summary.\n"
-        "If priority is CRITICAL or involves urgent financial refund issues, mark requires_human_escalation as True."
+        "If priority is CRITICAL or involves urgent financial refund issues, mark requires_human_escalation as True.\n\n"
+        "Categories:\n"
+        "- BUG_REPORT: something is broken, crashing, freezing or behaving wrongly.\n"
+        "- FEATURE_REQUEST: the user wants something new or an improvement that does not exist yet.\n"
+        "- BILLING_ISSUE: charges, refunds, invoices, subscriptions, payments.\n"
+        "- GENERAL_INQUIRY: questions or anything that fits none of the above.\n\n"
+        "Priority: CRITICAL = money lost, outage or user says critical/urgent; HIGH = core feature broken; "
+        "MEDIUM = annoying but has a workaround; LOW = cosmetic, requests or simple questions.\n"
+        "Only set customer_id if the message contains one. Never make one up."
     )),
     ("user", "{user_input}")
 ])
@@ -49,7 +57,14 @@ def route_and_execute_ticket(user_message: str):
 
     tool_result = ""
     
-    if ticket.requires_human_escalation:
+    # don't rely on the model alone for escalation
+    needs_human = (
+        ticket.requires_human_escalation
+        or ticket.priority == PriorityLevel.CRITICAL
+        or (ticket.category == ActionCategory.BILLING_ISSUE and not ticket.customer_id)
+    )
+
+    if needs_human:
         tool_result = escalate_to_human_agent.invoke({
             "summary": ticket.summary,
             "customer_id": ticket.customer_id
